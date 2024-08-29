@@ -21,6 +21,9 @@ double dragFactor = initK;
 double A = magnetCount / 2 * PI;
 double angularVelocity = 0;
 
+volatile unsigned long prevT = 0;
+volatile unsigned long t = 0;
+volatile unsigned long dt = 0;
 volatile unsigned long pulseInTimeEnd = 0;
 volatile unsigned long pulseInTimeEnd_old = 0;
 volatile unsigned long pulseInNumber = 0;
@@ -29,8 +32,8 @@ volatile double debounceTime = 4000;
 int subtractFromDebounce = 500;
 double driveSum = 0;
 
-const int numReadings = 1;
-int readings[numReadings];
+const int numReadings = 4;
+long readings[numReadings];
 int readIndex = 0;
 double total = 0;
 double average = 0;
@@ -70,10 +73,20 @@ float decay_factor = 0.5;
 float noise_factor = 3;
 
 void buttonPinInterrupt() {
-  // start measuring
+  // Start measuring
+  t = esp_timer_get_time();
+  dt = t - prevT; 
+  //Serial.println(dt);
+
+  // Prüfen, ob dt in den erwarteten Bereich fällt
+  if (dt < 7500) {
+    return;
+  }
+
+  prevT = t;  // prevT aktualisieren, um für das nächste Intervall bereit zu sein
   pulseInNumber++;
   pulseInTimeEnd_old = pulseInTimeEnd;
-  pulseInTimeEnd = esp_timer_get_time();
+  pulseInTimeEnd = t;
   newPulseDurationAvailable = true;
 }
 
@@ -151,7 +164,6 @@ void loop() {
         noInterrupts();
         pulseEnd = pulseInTimeEnd;
         pulseEndOld = pulseInTimeEnd_old;
-        interrupts();
 
         // Update the readings array
         total = total - readings[readIndex];
@@ -166,6 +178,8 @@ void loop() {
         averagePrev = average;
         average = total / numReadings;
         avInSeconds = average / 1000000.0;
+
+        interrupts();
 
         // Determine current state
         if (detectDrive(averagePrev, average)) {
