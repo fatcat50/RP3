@@ -21,14 +21,14 @@ double dragFactor = initK;
 double A = magnetCount / 2 * PI;
 double angularVelocity = 0;
 
-volatile unsigned long prevT = 0;
-volatile unsigned long t = 0;
-volatile unsigned long dt = 0;
-volatile unsigned long pulseInTimeEnd = 0;
-volatile unsigned long pulseInTimeEnd_old = 0;
-volatile unsigned long pulseInNumber = 0;
+volatile int64_t prevT = 0;
+volatile int64_t t = 0;
+volatile int64_t dt = 0;
+volatile int64_t pulseInTimeEnd = 0;
+volatile int64_t pulseInTimeEnd_old = 0;
+volatile int pulseInNumber = 0;
 volatile bool newPulseDurationAvailable = false;
-volatile double debounceTime = 4000;
+int debounceTime = 4000;
 int subtractFromDebounce = 500;
 double driveSum = 0;
 
