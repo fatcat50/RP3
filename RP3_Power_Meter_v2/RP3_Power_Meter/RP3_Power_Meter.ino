@@ -33,7 +33,7 @@ int subtractFromDebounce = 500;
 double driveSum = 0;
 double recoverSum = 0;
 unsigned long stateStartTime = 0;
-unsigned long minStateDuration = 200000;
+unsigned long minStateDuration = 10000;
 
 const int numReadings = 4;
 long readings[numReadings];
@@ -79,14 +79,15 @@ void buttonPinInterrupt() {
   // Start measuring
   t = esp_timer_get_time();
   dt = t - prevT;
-  prevT = t;
+  
   //Serial.println(dt);
 
   // Prüfen, ob dt in den erwarteten Bereich fällt
   if (dt < 4000) {
     return;
   }
-
+  prevT = t;
+  
   pulseInNumber++;
   pulseInTimeEnd_old = pulseInTimeEnd;
   pulseInTimeEnd = t;
@@ -169,16 +170,18 @@ void loop() {
           readIndex = 0;
         }
 
+        interrupts();
+
         // Calculate average
         averagePrev = average;
         average = total / numReadings;
         avInSeconds = average / 1000000.0;
 
-        interrupts();
+        //interrupts();
 
-        uint64_t currentTime = esp_timer_get_time();
+        uint64_t currentTime = t;
 
-        if (average >= 4000 && average <= 53366) {
+        if (average <= 53366) {
           // Determine current state
           State detectedState;
           if (detectDrive(averagePrev, average)) {
@@ -259,8 +262,8 @@ void loop() {
           Serial.println(avInSeconds, 8);
           driveSum = 0;
           recoverSum = 0;
+          previousState = currentState;
         }
-        previousState = currentState;
         newPulseDurationAvailable = false;
       }
     }
