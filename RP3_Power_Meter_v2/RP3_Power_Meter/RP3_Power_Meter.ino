@@ -1,5 +1,5 @@
 #include "Arduino.h"
-//#include "esp_timer.h"
+#include "esp_timer.h"
 /* For the bluetooth funcionality */
 #include <ArduinoBLE.h>
 /* Device name which can be scene in BLE scanning software. */
@@ -31,6 +31,9 @@ volatile bool newPulseDurationAvailable = false;
 int debounceTime = 4000;
 int subtractFromDebounce = 500;
 double driveSum = 0;
+double recoverSum = 0;
+unsigned long stateStartTime = 0;
+unsigned long minStateDuration = 200000;
 
 const int numReadings = 4;
 long readings[numReadings];
@@ -74,12 +77,13 @@ float noise_factor = 3;
 
 void buttonPinInterrupt() {
   // Start measuring
+  t = esp_timer_get_time();
   dt = t - prevT;
   prevT = t;
-  Serial.println(dt);
+  //Serial.println(dt);
 
   // Prüfen, ob dt in den erwarteten Bereich fällt
-  if (dt < 7500 || dt > 53366) {
+  if (dt < 4000) {
     return;
   }
 
@@ -139,8 +143,6 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  t = esp_timer_get_time();
   BLEDevice central = BLE.central();
 
   digitalWrite(LED_BUILTIN, LOW);
@@ -149,20 +151,18 @@ void loop() {
   delay(300);
 
   if (central) {
-    /* 
-    If a BLE device is connected, magnetic data will start being read, 
-    and the data will be processed
-    */
     digitalWrite(LED_BUILTIN, HIGH);
     Serial.print("Verbunden mit: ");
     Serial.println(central.address());
+
     while (central.connected()) {
+
       if (newPulseDurationAvailable) {
         noInterrupts();
 
         // Update the readings array
         total = total - readings[readIndex];
-        readings[readIndex] = pulseInTimeEnd - pulseInTimeEnd_old;
+        readings[readIndex] = abs(pulseInTimeEnd - pulseInTimeEnd_old);
         total = total + readings[readIndex];
         readIndex++;
         if (readIndex >= numReadings) {
@@ -176,76 +176,91 @@ void loop() {
 
         interrupts();
 
-        // Determine current state
-        if (detectDrive(averagePrev, average)) {
-          currentState = RECOVER;
-        } else {
-          currentState = DRIVE;
+        uint64_t currentTime = esp_timer_get_time();
+
+        if (average >= 4000 && average <= 53366) {
+          // Determine current state
+          State detectedState;
+          if (detectDrive(averagePrev, average)) {
+            detectedState = RECOVER;
+          } else {
+            detectedState = DRIVE;
+          }
+
+          // Check if we have been in the same state long enough
+          if (detectedState != currentState) {
+            // If the state has changed, check if we have been in the current state long enough
+            if (currentTime - stateStartTime >= minStateDuration) {
+              // We have been in the state long enough to consider it valid
+              previousState = currentState;
+              currentState = detectedState;
+              stateStartTime = currentTime;  // Reset the state start time for the new state
+            }
+          } else {
+            // If the state has not changed, update the start time
+            stateStartTime = currentTime;
+          }
+
+          // Process the state
+          if (currentState == DRIVE) {
+            driveSum += average;
+          }
+          if (currentState == RECOVER) {
+            recoverSum += average;
+          }
+
+          // Check for state change from Recover to Drive
+          if (previousState == DRIVE && currentState == RECOVER) {
+            Serial.print("Stroke finished! DriveSum = ");
+            Serial.println(driveSum);
+
+            angularVelocity = calculateAngularVelocity(average);
+            dragFactor = calculateDragFactor(dragFactor, average, averagePrev, pulseInNumber);
+            power = calculatePower(dragFactor, angularVelocity);
+
+            revolutions++;
+            timestamp += (unsigned short)(i_diff * (1024 / mag_samps_per_sec));
+
+            Serial.print("Schläge: ");
+            Serial.print(revolutions);
+            Serial.print("; angularVel: ");
+            Serial.print(angularVelocity);
+            Serial.print(" ; DragFactor: ");
+            Serial.print(dragFactor);
+            Serial.print(" ; Power: ");
+            Serial.println(power);
+
+            bleBuffer[0] = flags & 0xff;
+            bleBuffer[1] = (flags >> 8) & 0xff;
+            bleBuffer[2] = power & 0xff;
+            bleBuffer[3] = (power >> 8) & 0xff;
+            bleBuffer[4] = revolutions & 0xff;
+            bleBuffer[5] = (revolutions >> 8) & 0xff;
+            bleBuffer[6] = timestamp & 0xff;
+            bleBuffer[7] = (timestamp >> 8) & 0xff;
+
+            slBuffer[0] = sensorlocation & 0xff;
+
+            fBuffer[0] = 0x00;
+            fBuffer[1] = 0x00;
+            fBuffer[2] = 0x00;
+            fBuffer[3] = 0x08;
+
+            CyclePowerFeature.writeValue(fBuffer, 4);
+            CyclePowerMeasurement.writeValue(bleBuffer, 8);
+            CyclePowerSensorLocation.writeValue(slBuffer, 1);
+          }
+
+          // Print current average value
+          Serial.print(currentState == DRIVE ? "Drive:   " : "Recover: ");
+          Serial.print("Pulse: ");
+          Serial.print(pulseInNumber);
+          Serial.print("; Zeit (s): ");
+          Serial.println(avInSeconds, 8);
+          driveSum = 0;
+          recoverSum = 0;
         }
-
-        if (currentState == DRIVE) {
-          driveSum += average;
-          //Serial.print("Aktuelle Drive-Summe: ");
-          //Serial.println(driveSum);
-        }
-
-        // Check for state change from Recover to Drive
-        if (previousState == DRIVE && currentState == RECOVER) {
-          Serial.print("Stroke finished! DriveSum = ");
-          Serial.println(driveSum);
-
-          angularVelocity = calculateAngularVelocity(average);
-          dragFactor = calculateDragFactor(dragFactor, average, averagePrev, pulseInNumber);
-          power = calculatePower(dragFactor, angularVelocity);
-
-          revolutions = revolutions + 1;
-          timestamp = timestamp + (unsigned short)(i_diff * (1024 / mag_samps_per_sec));
-
-          Serial.print("Schläge: ");
-          Serial.print(revolutions);
-          Serial.print("; angularVel: ");
-          Serial.print(angularVelocity);
-          Serial.print(" ; DragFactor: ");
-          Serial.print(dragFactor);
-          Serial.print(" ; Power: ");
-          Serial.println(power);
-
-          bleBuffer[0] = flags & 0xff;
-          bleBuffer[1] = (flags >> 8) & 0xff;
-          bleBuffer[2] = power & 0xff;
-          bleBuffer[3] = (power >> 8) & 0xff;
-          bleBuffer[4] = revolutions & 0xff;
-          bleBuffer[5] = (revolutions >> 8) & 0xff;
-          bleBuffer[6] = timestamp & 0xff;
-          bleBuffer[7] = (timestamp >> 8) & 0xff;
-
-          slBuffer[0] = sensorlocation & 0xff;
-
-          fBuffer[0] = 0x00;
-          fBuffer[1] = 0x00;
-          fBuffer[2] = 0x00;
-          fBuffer[3] = 0x08;
-
-          CyclePowerFeature.writeValue(fBuffer, 4);
-          CyclePowerMeasurement.writeValue(bleBuffer, 8);
-          CyclePowerSensorLocation.writeValue(slBuffer, 1);
-        }
-
-        // Print current average value
-        //Serial.print("Aktueller Zustand: ");
-        if (currentState == DRIVE) {
-          Serial.print("Drive:   ");
-        } else {
-          Serial.print("Recover: ");
-        }
-        Serial.print("Pulse: ");
-        Serial.print(pulseInNumber);
-        Serial.print("; Zeit (s): ");
-        Serial.println(avInSeconds, 8);
-
-        // Update previous state
         previousState = currentState;
-
         newPulseDurationAvailable = false;
       }
     }
