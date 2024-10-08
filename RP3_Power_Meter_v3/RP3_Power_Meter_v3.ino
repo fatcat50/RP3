@@ -39,7 +39,7 @@ int subtractFromDebounce = 500;
 double driveSum = 0;
 double recoverSum = 0;
 unsigned long stateStartTime = 0;
-unsigned long minStateDuration = 10000;
+unsigned long minStateDuration = 100000;
 
 const int numReadings = 4;
 long readings[numReadings];
@@ -52,8 +52,8 @@ int numOfAvs = 0;
 
 enum State { RECOVER,
              DRIVE };
-State currentState = RECOVER;
-State previousState = RECOVER;
+State currentState = DRIVE;
+State previousState = DRIVE;
 
 //Nano33BLEMagneticData magneticData;
 
