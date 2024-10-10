@@ -51,6 +51,8 @@ double averagePrev = 0;
 double avInSeconds = 0;
 double averagePrevInSeconds = 0;
 int numOfAvs = 0;
+double strokeInSeconds = 0;
+double strokesPerMinute = 0;
 
 enum State { RECOVER,
              DRIVE };
@@ -227,7 +229,6 @@ void loop() {
 
           // Process the state
 
-
           if (currentState == DRIVE) {
             if (previousState == RECOVER && currentState == DRIVE) {
               drivePulseCount += 2;
@@ -236,6 +237,7 @@ void loop() {
             }
             drivePulseCount++;
             angularVelocitySum += calculateAngularVelocity(avInSeconds);
+            driveSum += avInSeconds;
           }
           if (currentState == RECOVER) {
             recoverPulseCount++;
@@ -243,6 +245,7 @@ void loop() {
               dragFactorSum += calculateDragFactor(avInSeconds, averagePrevInSeconds);
               //Serial.print(dragFactorSum, 8);
             }
+            recoverSum += avInSeconds;
           }
 
           if (previousState == RECOVER && currentState == DRIVE) {
@@ -266,6 +269,16 @@ void loop() {
             angularVelocity = angularVelocitySum / drivePulseCount;
             power = calculatePower(dragFactor, angularVelocity);  // Leistung berechnen
             revolutions++;
+            strokeInSeconds = driveSum + recoverSum;
+            strokesPerMinute = 60 / strokeInSeconds;
+            Serial.print("drivesum: ");
+            Serial.print(driveSum);
+            Serial.print("rec sum: ");
+            Serial.print(recoverSum);
+            Serial.print("stroke in sec: ");
+            Serial.print(strokeInSeconds);
+            Serial.print("strokes per minute: ");
+            Serial.print(strokesPerMinute);
             // Ausgabe der berechneten Werte
             Serial.println("Stroke finished!");
             Serial.print("Schläge: ");
@@ -277,9 +290,31 @@ void loop() {
             Serial.print(" ; Power: ");
             Serial.println(power);
 
+            bleBuffer[0] = flags & 0xff;
+            bleBuffer[1] = (flags >> 8) & 0xff;
+            bleBuffer[2] = power & 0xff;
+            bleBuffer[3] = (power >> 8) & 0xff;
+            bleBuffer[4] = revolutions & 0xff;
+            bleBuffer[5] = (revolutions >> 8) & 0xff;
+            bleBuffer[6] = timestamp & 0xff;
+            bleBuffer[7] = (timestamp >> 8) & 0xff;
+
+            slBuffer[0] = sensorlocation & 0xff;
+
+            fBuffer[0] = 0x00;
+            fBuffer[1] = 0x00;
+            fBuffer[2] = 0x00;
+            fBuffer[3] = 0x08;
+
+            CyclePowerFeature.writeValue(fBuffer, 4);
+            CyclePowerMeasurement.writeValue(bleBuffer, 8);
+            CyclePowerSensorLocation.writeValue(slBuffer, 1);
+
             // Variablen für den nächsten Drive-Zyklus zurücksetzen
             angularVelocitySum = 0;
             drivePulseCount = 0;
+            driveSum = 0;
+            recoverSum = 0;
           }
 
           // Print current average value
@@ -289,8 +324,7 @@ void loop() {
           Serial.print(numOfAvs);
           Serial.print("; Zeit (s): ");
           Serial.println(avInSeconds, 8);
-          driveSum = 0;
-          recoverSum = 0;
+
           previousState = currentState;
         }
         newPulseDurationAvailable = false;
