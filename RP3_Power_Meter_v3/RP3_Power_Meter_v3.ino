@@ -19,9 +19,8 @@ float cogWheelRad = 0.014195;
 float linkLength = 0.008;
 double initK = 0.0001;
 double dragFactor = 0.0001;
-double A = magnetCount / 2 * PI;
+double A = magnetCount / (2 * PI);
 double angularVelocity = 0;
-double curAngularVelocity = 0;
 double angularVelocitySum = 0;  // Summe der Winkelgeschwindigkeiten während des Drives
 int drivePulseCount = 0;
 double dragFactorSum = 0;   // Summe des Drag-Faktors während der Recover-Phase
@@ -43,11 +42,14 @@ unsigned long minStateDuration = 100000;
 
 const int numReadings = 4;
 long readings[numReadings];
+double avArray[numReadings];
 int readIndex = 0;
+int avArrayIndex = 0;
 double total = 0;
 double average = 0;
 double averagePrev = 0;
 double avInSeconds = 0;
+double averagePrevInSeconds = 0;
 int numOfAvs = 0;
 
 enum State { RECOVER,
@@ -118,8 +120,8 @@ double calculateDragFactor(double currentPulse, double previousPulse) {
   return deltaDragFactor;
 }
 
-double calculatePower(double dragFactor, double angularVelocity) {                              // Verhindere Division durch Null
-  return dragFactor * pow(angularVelocity, 3);               // Power basierend auf Durchschnitt berechnen
+double calculatePower(double dragFactor, double angularVelocity) {  // Verhindere Division durch Null
+  return dragFactor * pow(angularVelocity, 3);                      // Power basierend auf Durchschnitt berechnen
 }
 
 void setup() {
@@ -183,6 +185,7 @@ void loop() {
 
         // Calculate average
         averagePrev = average;
+        averagePrevInSeconds = averagePrev / 1000000.0;
         average = total / numReadings;
         avInSeconds = average / 1000000.0;
 
@@ -191,6 +194,15 @@ void loop() {
         uint64_t currentTime = t;
 
         if (average <= 53366) {
+
+          avArray[avArrayIndex] = avInSeconds;
+          //Serial.print(avArray[avArrayIndex], 6);
+          avArrayIndex++;
+
+          if (avArrayIndex >= numReadings) {
+            avArrayIndex = 0;
+          }
+
           // Determine current state
           State detectedState;
           if (detectDrive(averagePrev, average)) {
@@ -215,30 +227,47 @@ void loop() {
 
           // Process the state
 
-          curAngularVelocity = calculateAngularVelocity(avInSeconds);
-          //Serial.print(curAngularVelocity);
-          angularVelocitySum += curAngularVelocity;  // Winkelgeschwindigkeit summieren
-          angularVelocity = angularVelocitySum / pulseInNumber;
-          //Serial.print(angularVelocity);
 
           if (currentState == DRIVE) {
+            if (previousState == RECOVER && currentState == DRIVE) {
+              drivePulseCount += 2;
+              angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 2 + numReadings) % numReadings]);
+              angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
+            }
             drivePulseCount++;
+            angularVelocitySum += calculateAngularVelocity(avInSeconds);
           }
           if (currentState == RECOVER) {
             recoverPulseCount++;
-            double newDragFactor = calculateDragFactor(average, averagePrev);
-            dragFactorSum += newDragFactor;  // Summe der Drag-Faktoren während der Recover-Phase
+            if (recoverPulseCount >= magnetCount) {
+              dragFactorSum += calculateDragFactor(avInSeconds, averagePrevInSeconds);
+              //Serial.print(dragFactorSum, 8);
+            }
+          }
+
+          if (previousState == RECOVER && currentState == DRIVE) {
+            // Sicherstellen, dass wir Pulse haben
+            Serial.print(dragFactorSum, 8);
+            Serial.print("rec pulse");
+            Serial.print(recoverPulseCount);
+            dragFactor = (dragFactorSum / (recoverPulseCount - magnetCount));  // Durchschnitt berechnen
+
+            // Ausgabe des neuen Drag-Faktors
+            Serial.print("Neuer Drag-Faktor (nach Recover): ");
+            Serial.println(dragFactor, 6);
+
+            // Reset der Variablen für den nächsten Recover
+            dragFactorSum = 0;
+            recoverPulseCount = 0;
           }
 
           // Check for state change from Recover to Drive
           if (previousState == DRIVE && currentState == RECOVER) {
-            // Sicherstellen, dass wir Pulse haben
+            angularVelocity = angularVelocitySum / drivePulseCount;
             power = calculatePower(dragFactor, angularVelocity);  // Leistung berechnen
             revolutions++;
             // Ausgabe der berechneten Werte
-            Serial.print("Stroke finished! Power = ");
-            Serial.println(power);
-
+            Serial.println("Stroke finished!");
             Serial.print("Schläge: ");
             Serial.print(revolutions);
             Serial.print("; Durchschnittliche Winkelgeschwindigkeit: ");
@@ -253,19 +282,6 @@ void loop() {
             drivePulseCount = 0;
           }
 
-          if (previousState == RECOVER && currentState == DRIVE) {
-            // Sicherstellen, dass wir Pulse haben
-            dragFactor = (dragFactorSum / (recoverPulseCount - magnetCount));  // Durchschnitt berechnen
-
-            // Ausgabe des neuen Drag-Faktors
-            Serial.print("Neuer Drag-Faktor (nach Recover): ");
-            Serial.println(dragFactor, 6);
-
-            // Reset der Variablen für den nächsten Recover
-            dragFactorSum = 0;
-            recoverPulseCount = 0;
-          }
-
           // Print current average value
           Serial.print(currentState == DRIVE ? "Drive:   " : "Recover: ");
           Serial.print("Pulse: ");
@@ -278,6 +294,7 @@ void loop() {
           previousState = currentState;
         }
         newPulseDurationAvailable = false;
+
         interrupts();
       }
     }
