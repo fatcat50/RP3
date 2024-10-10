@@ -45,14 +45,14 @@ long readings[numReadings];
 double avArray[numReadings];
 int readIndex = 0;
 int avArrayIndex = 0;
-double total = 0;
+float total = 0;
 double average = 0;
 double averagePrev = 0;
 double avInSeconds = 0;
 double averagePrevInSeconds = 0;
 int numOfAvs = 0;
 double strokeInSeconds = 0;
-double strokesPerMinute = 0;
+float strokesPerMinute = 0;
 
 enum State { RECOVER,
              DRIVE };
@@ -66,12 +66,11 @@ BLECharacteristic CyclePowerFeature("2A65", BLERead, 4);
 BLECharacteristic CyclePowerMeasurement("2A63", BLERead | BLENotify, 8);
 BLECharacteristic CyclePowerSensorLocation("2A5D", BLERead, 1);
 
-unsigned char bleBuffer[8];
+float bleBuffer[8];
 unsigned char slBuffer[1];
 unsigned char fBuffer[4];
 
-short power;
-long random_power;
+float power = 0;
 unsigned short revolutions = 0;
 unsigned short timestamp = 0;
 unsigned short flags = 0x20;
@@ -267,10 +266,10 @@ void loop() {
           // Check for state change from Recover to Drive
           if (previousState == DRIVE && currentState == RECOVER) {
             angularVelocity = angularVelocitySum / drivePulseCount;
-            power = calculatePower(dragFactor, angularVelocity);  // Leistung berechnen
+            power = (float)calculatePower(dragFactor, angularVelocity);  // Leistung berechnen
             revolutions++;
             strokeInSeconds = driveSum + recoverSum;
-            strokesPerMinute = 60 / strokeInSeconds;
+            strokesPerMinute = 60 / (float)strokeInSeconds;
             Serial.print("drivesum: ");
             Serial.print(driveSum);
             Serial.print("rec sum: ");
@@ -290,15 +289,22 @@ void loop() {
             Serial.print(" ; Power: ");
             Serial.println(power);
 
+            // Kopiere den float-Wert für Power in den BLE-Puffer
+            memcpy(&bleBuffer[0], &power, sizeof(float));  // 4 Bytes für Power
+
+            // Kopiere den float-Wert für Strokes per Minute in den BLE-Puffer
+            memcpy(&bleBuffer[4], &strokesPerMinute, sizeof(float));  // 4 Bytes für Strokes per Minute
+
+            /*
             bleBuffer[0] = flags & 0xff;
             bleBuffer[1] = (flags >> 8) & 0xff;
             bleBuffer[2] = power & 0xff;
             bleBuffer[3] = (power >> 8) & 0xff;
-            bleBuffer[4] = revolutions & 0xff;
-            bleBuffer[5] = (revolutions >> 8) & 0xff;
+            bleBuffer[4] = (int)strokesPerMinute & 0xff;
+            bleBuffer[5] = ((int)strokesPerMinute >> 8) & 0xff;
             bleBuffer[6] = timestamp & 0xff;
             bleBuffer[7] = (timestamp >> 8) & 0xff;
-
+*/
             slBuffer[0] = sensorlocation & 0xff;
 
             fBuffer[0] = 0x00;
@@ -307,7 +313,7 @@ void loop() {
             fBuffer[3] = 0x08;
 
             CyclePowerFeature.writeValue(fBuffer, 4);
-            CyclePowerMeasurement.writeValue(bleBuffer, 8);
+            CyclePowerMeasurement.writeValue(bleBuffer, sizeof(bleBuffer));
             CyclePowerSensorLocation.writeValue(slBuffer, 1);
 
             // Variablen für den nächsten Drive-Zyklus zurücksetzen
