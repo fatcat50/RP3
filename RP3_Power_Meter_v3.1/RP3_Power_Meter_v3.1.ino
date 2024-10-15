@@ -25,6 +25,7 @@ double angularVelocitySum = 0;  // Summe der Winkelgeschwindigkeiten während de
 int drivePulseCount = 0;
 double dragFactorSum = 0;   // Summe des Drag-Faktors während der Recover-Phase
 int recoverPulseCount = 0;  // Anzahl der Pulse in der Recover-Phase
+int validReadingsCount = 0;
 
 volatile int64_t prevT = 0;
 volatile int64_t t = 0;
@@ -33,12 +34,13 @@ volatile int64_t pulseInTimeEnd = 0;
 volatile int64_t pulseInTimeEnd_old = 0;
 volatile int pulseInNumber = 0;
 volatile bool newPulseDurationAvailable = false;
-int debounceTime = 6000;
-int upperLimit = 53366;
+const int debounceTime = 6000;
+const int upperLimit = 53366;
 double driveSum = 0;
 double recoverSum = 0;
 unsigned long stateStartTime = 0;
-unsigned long minStateDuration = 100000;
+unsigned long minStateDuration = 200000;
+int transitionPulseCount = 0;  // Zählt die Pulse nach Zustandwechsel von Drive zu Recover
 
 const int numReadings = 4;
 long readings[numReadings];
@@ -57,7 +59,7 @@ float strokesPerMinute = 0;
 enum State { RECOVER,
              DRIVE };
 State currentState = DRIVE;
-State previousState = DRIVE;
+State previousState = RECOVER;
 
 //Nano33BLEMagneticData magneticData;
 
@@ -95,6 +97,16 @@ void buttonPinInterrupt() {
 bool detectDrive(double prev, double cur) {
   // Erkennung, ob der Wert von Recover auf Drive gewechselt hat
   return (prev / cur) < 1;
+}
+
+int countValidReadings(long readings[], int arraySize) {
+  int count = 0;
+  for (int i = 0; i < arraySize; i++) {
+    if (readings[i] != 0) {
+      count++;
+    }
+  }
+  return count;
 }
 
 double calculateAngularVelocity(double pulseTime) {
@@ -155,9 +167,7 @@ void loop() {
     while (central.connected()) {
 
       if (newPulseDurationAvailable) {
-        numOfAvs++;
         noInterrupts();
-
         // Update the readings array
         total = total - readings[readIndex];
         readings[readIndex] = abs(pulseInTimeEnd - pulseInTimeEnd_old);
@@ -167,15 +177,20 @@ void loop() {
           readIndex = 0;
         }
 
+        validReadingsCount = countValidReadings(readings, numReadings);
+
         // Calculate average
         averagePrev = average;
         averagePrevInSeconds = averagePrev / 1000000.0;
-        average = total / numReadings;
+        average = total / validReadingsCount;
         avInSeconds = average / 1000000.0;
 
         uint64_t currentTime = t;
 
+        //interrupts();
+
         if (average <= upperLimit) {
+          numOfAvs++;
 
           avArray[avArrayIndex] = avInSeconds;
           avArrayIndex++;
@@ -192,6 +207,7 @@ void loop() {
             detectedState = DRIVE;
           }
 
+          /*
           // Check if we have been in the same state long enough
           if (detectedState != currentState) {
             // If the state has changed, check if we have been in the current state long enough
@@ -205,71 +221,102 @@ void loop() {
             // If the state has not changed, update the start time
             stateStartTime = currentTime;
           }
+          */
+          // Handle state transition logic
+          if (previousState == DRIVE && detectedState == RECOVER) {
+            if (transitionPulseCount < 6) {
+              // Bleibe in Drive, aber zähle weiter Pulse
+              transitionPulseCount++;
+              currentState = DRIVE;  // Halte den Zustand auf Drive
+            } else {
+              // Nach 6 Pulsen wechsle endgültig zu Recover
+              currentState = RECOVER;
+              transitionPulseCount = 0;  // Setze den Zähler zurück
+            }
+          } else {
+            // Normale Zustandsänderung ohne Verzögerung
+            currentState = detectedState;
+          }
 
           // Process the state
-
           if (currentState == DRIVE) {
+            if (previousState == RECOVER && currentState == DRIVE && revolutions >= 1) {
+              /*Serial.print(dragFactorSum, 8);
+            Serial.print("rec pulse");
+            Serial.print(recoverPulseCount);
+            */
+              /*recoverPulseCount -= 2;
+              recoverSum -= avArray[(avArrayIndex - 2 + numReadings) % numReadings];
+              recoverSum -= avArray[(avArrayIndex - 3 + numReadings) % numReadings];
+              dragFactorSum -= calculateDragFactor(avArray[(avArrayIndex - 2 + numReadings) % numReadings], avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
+              dragFactorSum -= calculateDragFactor(avArray[(avArrayIndex - 3 + numReadings) % numReadings], avArray[(avArrayIndex - 4 + numReadings) % numReadings]);
+
+              */
+              dragFactor = (dragFactorSum / (recoverPulseCount - magnetCount));  // Durchschnitt berechnen
+
+              //Serial.print("Neuer Drag-Faktor (nach Recover): ");
+              //Serial.println(dragFactor, 6);
+
+              dragFactorSum = 0;
+              recoverPulseCount = 0;
+            }
             if (previousState == RECOVER && currentState == DRIVE) {
-              drivePulseCount += 2;
-              angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 2 + numReadings) % numReadings]);
-              angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
+              if (revolutions < 1) {
+                drivePulseCount++;
+                angularVelocitySum += calculateAngularVelocity(averagePrevInSeconds);
+                driveSum += averagePrevInSeconds;
+              } else {
+                drivePulseCount += 2;
+                angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 2 + numReadings) % numReadings]);
+                driveSum += avArray[(avArrayIndex - 2 + numReadings) % numReadings];
+                angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
+                driveSum += avArray[(avArrayIndex - 3 + numReadings) % numReadings];
+              }
             }
             drivePulseCount++;
             angularVelocitySum += calculateAngularVelocity(avInSeconds);
             driveSum += avInSeconds;
           }
+
           if (currentState == RECOVER) {
-            recoverPulseCount++;
-            if (recoverPulseCount >= magnetCount) {
-              dragFactorSum += calculateDragFactor(avInSeconds, averagePrevInSeconds);
-            }
-            recoverSum += avInSeconds;
-          }
+            if (previousState == DRIVE && currentState == RECOVER) {
 
-          if (previousState == RECOVER && currentState == DRIVE) {
-            Serial.print(dragFactorSum, 8);
-            Serial.print("rec pulse");
-            Serial.print(recoverPulseCount);
-            dragFactor = (dragFactorSum / (recoverPulseCount - magnetCount));  // Durchschnitt berechnen
+              /*drivePulseCount -= 2;
+              driveSum -= avArray[(avArrayIndex - 2 + numReadings) % numReadings];
+              driveSum -= avArray[(avArrayIndex - 3 + numReadings) % numReadings];
+              angularVelocitySum -= calculateAngularVelocity(avArray[(avArrayIndex - 2 + numReadings) % numReadings]);
+              angularVelocitySum -= calculateAngularVelocity(avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
+*/
+              angularVelocity = angularVelocitySum / drivePulseCount;
+              power = (float)calculatePower(dragFactor, angularVelocity);  // Leistungsberechnung
+              revolutions++;
+              strokeInSeconds = driveSum + recoverSum;
+              strokesPerMinute = 60 / (float)strokeInSeconds;
+              Serial.print("drivesum: ");
+              Serial.print(driveSum, 2);
+              Serial.print(" ; rec sum: ");
+              Serial.print(recoverSum, 2);
+              Serial.print(" ; stroke in sec: ");
+              Serial.print(strokeInSeconds, 2);
+              Serial.print(" ; strokes per minute: ");
+              Serial.print(round(strokesPerMinute));
+              //Serial.println("Stroke finished!");
+              Serial.print(" ; Schläge: ");
+              Serial.print(revolutions);
+              //Serial.print("; Durchschnittliche Winkelgeschwindigkeit: ");
+              //Serial.print(angularVelocity);
+              //Serial.print(" ; DragFactor: ");
+              //Serial.print(dragFactor, 6);
+              Serial.print(" ; Power: ");
+              Serial.println(round(power));
 
-            Serial.print("Neuer Drag-Faktor (nach Recover): ");
-            Serial.println(dragFactor, 6);
+              // Kopiere den float-Wert für Power in den BLE-Puffer
+              memcpy(&bleBuffer[0], &power, sizeof(float));  // 4 Bytes für Power
 
-            dragFactorSum = 0;
-            recoverPulseCount = 0;
-          }
+              // Kopiere den float-Wert für Strokes per Minute in den BLE-Puffer
+              memcpy(&bleBuffer[4], &strokesPerMinute, sizeof(float));  // 4 Bytes für Strokes per Minute
 
-          if (previousState == DRIVE && currentState == RECOVER) {
-            angularVelocity = angularVelocitySum / drivePulseCount;
-            power = (float)calculatePower(dragFactor, angularVelocity);  // Leistungsberechnung
-            revolutions++;
-            strokeInSeconds = driveSum + recoverSum;
-            strokesPerMinute = 60 / (float)strokeInSeconds;
-            Serial.print("drivesum: ");
-            Serial.print(driveSum);
-            Serial.print("rec sum: ");
-            Serial.print(recoverSum);
-            Serial.print("stroke in sec: ");
-            Serial.print(strokeInSeconds);
-            Serial.print("strokes per minute: ");
-            Serial.print(strokesPerMinute);
-            Serial.println("Stroke finished!");
-            Serial.print("Schläge: ");
-            Serial.print(revolutions);
-            Serial.print("; Durchschnittliche Winkelgeschwindigkeit: ");
-            Serial.print(angularVelocity);
-            Serial.print(" ; DragFactor: ");
-            Serial.print(dragFactor, 6);
-            Serial.print(" ; Power: ");
-            Serial.println(power);
-
-            // Kopiere den float-Wert für Power in den BLE-Puffer
-            memcpy(&bleBuffer[0], &power, sizeof(float));  // 4 Bytes für Power
-
-            // Kopiere den float-Wert für Strokes per Minute in den BLE-Puffer
-            memcpy(&bleBuffer[4], &strokesPerMinute, sizeof(float));  // 4 Bytes für Strokes per Minute
-
-            /*
+              /*
             bleBuffer[0] = flags & 0xff;
             bleBuffer[1] = (flags >> 8) & 0xff;
             bleBuffer[2] = power & 0xff;
@@ -279,24 +326,30 @@ void loop() {
             bleBuffer[6] = timestamp & 0xff;
             bleBuffer[7] = (timestamp >> 8) & 0xff;
 */
-            slBuffer[0] = sensorlocation & 0xff;
+              slBuffer[0] = sensorlocation & 0xff;
 
-            fBuffer[0] = 0x00;
-            fBuffer[1] = 0x00;
-            fBuffer[2] = 0x00;
-            fBuffer[3] = 0x08;
+              fBuffer[0] = 0x00;
+              fBuffer[1] = 0x00;
+              fBuffer[2] = 0x00;
+              fBuffer[3] = 0x08;
 
-            CyclePowerFeature.writeValue(fBuffer, 4);
-            CyclePowerMeasurement.writeValue(bleBuffer, sizeof(bleBuffer));
-            CyclePowerSensorLocation.writeValue(slBuffer, 1);
+              CyclePowerFeature.writeValue(fBuffer, 4);
+              CyclePowerMeasurement.writeValue(bleBuffer, sizeof(bleBuffer));
+              CyclePowerSensorLocation.writeValue(slBuffer, 1);
 
-            // Variablen für den nächsten Drive-Zyklus zurücksetzen
-            angularVelocitySum = 0;
-            drivePulseCount = 0;
-            driveSum = 0;
-            recoverSum = 0;
+              // Variablen für den nächsten Drive-Zyklus zurücksetzen
+              angularVelocitySum = 0;
+              drivePulseCount = 0;
+              driveSum = 0;
+              recoverSum = 0;
+            }
+            recoverPulseCount++;
+            if (recoverPulseCount >= magnetCount) {  //first 4 pulses ignored, siehe doc
+              dragFactorSum += calculateDragFactor(avInSeconds, averagePrevInSeconds);
+            }
+            recoverSum += avInSeconds;
           }
-
+/*
           Serial.print(currentState == DRIVE ? "Drive:   " : "Recover: ");
           Serial.print("Pulse: ");
           //Serial.print(pulseInNumber);
@@ -304,6 +357,7 @@ void loop() {
           Serial.print("; Zeit (s): ");
           Serial.println(avInSeconds, 8);
 
+*/
           previousState = currentState;
         }
         newPulseDurationAvailable = false;
