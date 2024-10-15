@@ -245,9 +245,10 @@ void loop() {
             Serial.print("rec pulse");
             Serial.print(recoverPulseCount);
             */
-              /*recoverPulseCount -= 2;
+              //recoverPulseCount -= 2;
               recoverSum -= avArray[(avArrayIndex - 2 + numReadings) % numReadings];
               recoverSum -= avArray[(avArrayIndex - 3 + numReadings) % numReadings];
+              /*
               dragFactorSum -= calculateDragFactor(avArray[(avArrayIndex - 2 + numReadings) % numReadings], avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
               dragFactorSum -= calculateDragFactor(avArray[(avArrayIndex - 3 + numReadings) % numReadings], avArray[(avArrayIndex - 4 + numReadings) % numReadings]);
 
@@ -261,17 +262,17 @@ void loop() {
               recoverPulseCount = 0;
             }
             if (previousState == RECOVER && currentState == DRIVE) {
-              if (revolutions < 1) {
+              /*if (revolutions < 1) {
                 drivePulseCount++;
                 angularVelocitySum += calculateAngularVelocity(averagePrevInSeconds);
                 driveSum += averagePrevInSeconds;
-              } else {
+              } else {*/
                 drivePulseCount += 2;
                 angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 2 + numReadings) % numReadings]);
                 driveSum += avArray[(avArrayIndex - 2 + numReadings) % numReadings];
                 angularVelocitySum += calculateAngularVelocity(avArray[(avArrayIndex - 3 + numReadings) % numReadings]);
                 driveSum += avArray[(avArrayIndex - 3 + numReadings) % numReadings];
-              }
+              //}
             }
             drivePulseCount++;
             angularVelocitySum += calculateAngularVelocity(avInSeconds);
@@ -293,11 +294,11 @@ void loop() {
               strokeInSeconds = driveSum + recoverSum;
               strokesPerMinute = 60 / (float)strokeInSeconds;
               Serial.print("drivesum: ");
-              Serial.print(driveSum, 2);
+              Serial.print(driveSum, 3);
               Serial.print(" ; rec sum: ");
-              Serial.print(recoverSum, 2);
+              Serial.print(recoverSum, 3);
               Serial.print(" ; stroke in sec: ");
-              Serial.print(strokeInSeconds, 2);
+              Serial.print(strokeInSeconds, 3);
               Serial.print(" ; strokes per minute: ");
               Serial.print(round(strokesPerMinute));
               //Serial.println("Stroke finished!");
