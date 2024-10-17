@@ -43,6 +43,9 @@ double recoverSum = 0;
 unsigned long stateStartTime = 0;
 unsigned long minStateDuration = 200000;
 int transitionPulseCount = 0;  // Zählt die Pulse nach Zustandwechsel von Drive zu Recover
+unsigned long previousMillis = 0;
+const long updateInterval = 100;
+unsigned long lastMeasurementMillis = 0;
 
 const int numReadings = 4;
 long readings[numReadings];
@@ -167,14 +170,32 @@ void loop() {
     Serial.println(central.address());
 
     while (central.connected()) {
-      slBuffer[0] = sensorlocation & 0xff;
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= updateInterval) {
+        previousMillis = currentMillis;
+        slBuffer[0] = sensorlocation & 0xff;
 
-      fBuffer[0] = 0x00;
-      fBuffer[1] = 0x00;
-      fBuffer[2] = 0x00;
-      fBuffer[3] = 0x08;
-      CyclePowerFeature.writeValue(fBuffer, 4);
-      CyclePowerSensorLocation.writeValue(slBuffer, 1);
+        fBuffer[0] = 0x00;
+        fBuffer[1] = 0x00;
+        fBuffer[2] = 0x00;
+        fBuffer[3] = 0x08;
+
+        CyclePowerFeature.writeValue(fBuffer, 4);
+        CyclePowerSensorLocation.writeValue(slBuffer, 1);
+
+        bleBuffer[0] = flags & 0xff;
+        bleBuffer[1] = (flags >> 8) & 0xff;
+        bleBuffer[2] = (short)round(power) & 0xff;
+        bleBuffer[3] = ((short)round(power) >> 8) & 0xff;
+        bleBuffer[4] = (short)round(strokesPerMinute) & 0xff;
+        bleBuffer[5] = ((short)round(strokesPerMinute) >> 8) & 0xff;
+        bleBuffer[6] = timestamp & 0xff;
+        bleBuffer[7] = (timestamp >> 8) & 0xff;
+        
+        CyclePowerMeasurement.writeValue(bleBuffer, 8);
+      }
+
+      //CyclePowerMeasurement.writeValue(bleBuffer, 8);
 
       if (newPulseDurationAvailable) {
         noInterrupts();
@@ -325,15 +346,7 @@ void loop() {
               //timestamp = timestamp + (unsigned short)(i_diff * (1024 / mag_samps_per_sec));
               timestamp = (unsigned short)(esp_timer_get_time() / 1000 * 1.024);
 
-              bleBuffer[0] = flags & 0xff;
-              bleBuffer[1] = (flags >> 8) & 0xff;
-              bleBuffer[2] = (short)round(power) & 0xff;
-              bleBuffer[3] = ((short)round(power) >> 8) & 0xff;
-              bleBuffer[4] = (short)round(strokesPerMinute) & 0xff;
-              bleBuffer[5] = ((short)round(strokesPerMinute) >> 8) & 0xff;
-              bleBuffer[6] = timestamp & 0xff;
-              bleBuffer[7] = (timestamp >> 8) & 0xff;
-              CyclePowerMeasurement.writeValue(bleBuffer, 8);
+
 
 
               // Variablen für den nächsten Drive-Zyklus zurücksetzen
