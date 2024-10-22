@@ -44,7 +44,7 @@ unsigned long stateStartTime = 0;
 unsigned long minStateDuration = 200000;
 int transitionPulseCount = 0;  // Zählt die Pulse nach Zustandwechsel von Drive zu Recover
 unsigned long previousMillis = 0;
-const long updateInterval = 100;
+const long updateInterval = 1000;
 unsigned long lastMeasurementMillis = 0;
 
 const int numReadings = 4;
@@ -191,7 +191,7 @@ void loop() {
         bleBuffer[5] = ((short)round(strokesPerMinute) >> 8) & 0xff;
         bleBuffer[6] = timestamp & 0xff;
         bleBuffer[7] = (timestamp >> 8) & 0xff;
-        
+
         CyclePowerMeasurement.writeValue(bleBuffer, 8);
       }
 
@@ -345,9 +345,6 @@ void loop() {
               //memcpy(&bleBuffer[4], &strokesPerMinute, sizeof(float));  // 4 Bytes für Strokes per Minute
               //timestamp = timestamp + (unsigned short)(i_diff * (1024 / mag_samps_per_sec));
               timestamp = (unsigned short)(esp_timer_get_time() / 1000 * 1.024);
-
-
-
 
               // Variablen für den nächsten Drive-Zyklus zurücksetzen
               angularVelocitySum = 0;
