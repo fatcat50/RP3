@@ -357,30 +357,34 @@ void loop() {
         interrupts();
       }
       //RANDOMIZED TEST
-      /*
+
       if (currentMillis - prevMillisRandom >= randomTime) {
-        revolutions++;
+        revolutions += 10;
         currentTimeMicroSeconds = esp_timer_get_time();
         lastCrankEventTime = (currentTimeMicroSeconds / 1000) * 1.024;
         timestamp = lastCrankEventTime;
-        randomTime = random(1000, 3000);
+        randomTime = random(2000, 3000);
         prevMillisRandom = currentMillis;
+        power = random(50, 101);
+
+        updateValues = true;
       }
       Serial.print(revolutions);
       Serial.print("; ");
       Serial.println(timestamp);
-      */
-      if (currentMillis - previousMillis >= updateInterval) {
-        /*unsigned long currentTimeMicroSeconds = esp_timer_get_time();
-        lastCrankEventTime = (currentTimeMicroSeconds / 1000) * 1.024;
 
-        timestamp = lastCrankEventTime;
-        */
+      if (currentMillis - previousMillis >= updateInterval) {
+
+
         if (!updateValues) {
-          revolutions++;
-          timestamp = (revolutions * timestamp) / (revolutions - 1);
+          unsigned long currentTimeMicroSeconds = esp_timer_get_time();
+          lastCrankEventTime = (currentTimeMicroSeconds / 1000) * 1.024;
+
+          timestamp = lastCrankEventTime;
+
+          revolutions += 10;
         }
-        //power = random(50, 101);
+
 
         previousMillis = currentMillis;
         slBuffer[0] = sensorlocation & 0xff;
@@ -412,7 +416,7 @@ void loop() {
         Serial.print("; strokerate: ");
         double strokerateprint = revolutions * 60 / timestamp;
         Serial.println(strokerateprint);
-        
+
         updateValues = false;
       }
     }
