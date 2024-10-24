@@ -49,7 +49,6 @@ unsigned long lastMeasurementMillis = 0;
 unsigned short lastCrankEventTime = 0;
 unsigned long currentTimeMicroSeconds = 0;
 unsigned long randomTime = random(1000, 3000);
-;
 unsigned long prevMillisRandom = 0;
 
 const int numReadings = 4;
