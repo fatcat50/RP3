@@ -48,7 +48,7 @@ const long updateInterval = 1000;
 unsigned long lastMeasurementMillis = 0;
 unsigned short lastCrankEventTime = 0;
 unsigned long currentTimeMicroSeconds = 0;
-unsigned long randomTime = random(1000, 3000);
+unsigned long randomTime = random(2000, 3000);
 unsigned long prevMillisRandom = 0;
 
 const int numReadings = 4;
@@ -84,8 +84,9 @@ unsigned char fBuffer[4];
 float power = 0;
 unsigned short revolutions = 0;
 unsigned short prevRevolutions = 0;
-unsigned short timestamp = 0;
-unsigned short prevTimestamp = 0;
+unsigned short timestamp = 1;
+unsigned short prevTimestamp = 1;
+unsigned short timeStampDiff = 0;
 unsigned short flags = 0x20;
 byte sensorlocation = 0x0D;
 bool updateValues = false;
@@ -161,6 +162,15 @@ void setup() {
     BLE.addService(CyclePowerService);
     BLE.advertise();
   }
+  slBuffer[0] = sensorlocation & 0xff;
+
+  fBuffer[0] = 0x00;
+  fBuffer[1] = 0x00;
+  fBuffer[2] = 0x00;
+  fBuffer[3] = 0x08;
+
+  CyclePowerFeature.writeValue(fBuffer, 4);
+  CyclePowerSensorLocation.writeValue(slBuffer, 1);
 }
 
 void loop() {
@@ -298,10 +308,10 @@ void loop() {
             if (previousState == DRIVE) {
               angularVelocity = angularVelocitySum / drivePulseCount;
               power = (float)calculatePower(dragFactor, angularVelocity);  // Leistungsberechnung
-              revolutions += 3;
+              revolutions++;
               strokeInSeconds = driveSum + recoverSum;
               strokesPerMinute = 60 / (float)strokeInSeconds;
-              
+
               Serial.print("drivesum: ");
               Serial.print(driveSum, 3);
               Serial.print(" ; rec sum: ");
@@ -363,57 +373,59 @@ void loop() {
         interrupts();
       }
       //RANDOMIZED TEST
-      /*
+
       if (currentMillis - prevMillisRandom >= randomTime) {
-        revolutions++;
-        currentTimeMicroSeconds = esp_timer_get_time();
-        lastCrankEventTime = (currentTimeMicroSeconds / 1000) * 1.024;
-        timestamp = lastCrankEventTime;
-        randomTime = random(1000, 3000);
+        //revolutions++;
+        timestamp += short(randomTime * 1.024);
+        randomTime = random(3000, 3500);
         prevMillisRandom = currentMillis;
+        power = random(90, 100);
+        updateValues = true;
       }
+      
+      /*
       Serial.print(revolutions);
       Serial.print("; ");
       Serial.println(timestamp);
       */
-      if (currentMillis - previousMillis >= updateInterval)) {
-        /*
-        revolutions++;
-        unsigned long currentTimeMicroSeconds = esp_timer_get_time();
-        lastCrankEventTime = (currentTimeMicroSeconds / 1000) * 1.024;
+      if (currentMillis - previousMillis >= updateInterval) {
 
-        timestamp = lastCrankEventTime;
-        
-        power = random(50, 101);
-        */
         previousMillis = currentMillis;
 
-        if(!updateValues) {
-          revolutions += 3;
-          timestamp = timestamp + timestamp - prevTimestamp; 
+        if (!updateValues) {
+          timestamp += timeStampDiff;
+
+          if (revolutions > 0) {
+            revolutions++;
+          }
+        } else {
+          revolutions++;
         }
-
-        slBuffer[0] = sensorlocation & 0xff;
-
-        fBuffer[0] = 0x00;
-        fBuffer[1] = 0x00;
-        fBuffer[2] = 0x00;
-        fBuffer[3] = 0x08;
-
-        CyclePowerFeature.writeValue(fBuffer, 4);
-        CyclePowerSensorLocation.writeValue(slBuffer, 1);
 
         bleBuffer[0] = flags & 0xff;
         bleBuffer[1] = (flags >> 8) & 0xff;
         bleBuffer[2] = (short)round(power) & 0xff;
         bleBuffer[3] = ((short)round(power) >> 8) & 0xff;
-        bleBuffer[4] = revolutions & 0xff;
-        bleBuffer[5] = (revolutions >> 8) & 0xff;
-        bleBuffer[6] = timestamp & 0xff;
-        bleBuffer[7] = (timestamp >> 8) & 0xff;
+        bleBuffer[4] = (unsigned short)revolutions & 0xff;
+        bleBuffer[5] = ((unsigned short)revolutions >> 8) & 0xff;
+        bleBuffer[6] = (unsigned short)timestamp & 0xff;
+        bleBuffer[7] = ((unsigned short)timestamp >> 8) & 0xff;
 
         CyclePowerMeasurement.writeValue(bleBuffer, 8);
+        Serial.print("power: ");
+        Serial.print(power);
+        Serial.print(" ; revolutions: ");
+        Serial.print(revolutions);
+        Serial.print(" ; PREVtimestamp: ");
+        Serial.print(prevTimestamp);
+        Serial.print(" ; timestamp: ");
+        Serial.print(timestamp);
+        Serial.print("; updateState: ");
+        Serial.println(updateValues);
+
+        timeStampDiff = timestamp - prevTimestamp;
         prevTimestamp = timestamp;
+
         updateValues = false;
       }
     }
