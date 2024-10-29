@@ -1,9 +1,9 @@
 #include "Arduino.h"
 #include "esp_timer.h"
 #include <ArduinoBLE.h>
-#define BLE_DEVICE_NAME "RP3 Power Meter" // Device name which can be scene in BLE scanning software.
-#define BLE_LOCAL_NAME "RP3 Power Meter" // Local name which should pop up when scanning for BLE devices.
-#define PULSE_PIN 2 // GPIO pin for pulse sensor
+#define BLE_DEVICE_NAME "RP3 Power Meter"  // Device name which can be scene in BLE scanning software.
+#define BLE_LOCAL_NAME "RP3 Power Meter"   // Local name which should pop up when scanning for BLE devices.
+#define PULSE_PIN 2                        // GPIO pin for pulse sensor
 #define PI 3.1415926535897932384626433832795
 
 // Model S configuration
@@ -18,10 +18,10 @@ double initK = 0.0001;
 double dragFactor = 0.0001;
 double A = magnetCount / (2 * PI);
 double angularVelocity = 0;
-double angularVelocitySum = 0;  // Summe der Winkelgeschwindigkeiten während des Drives
+double angularVelocitySum = 0; 
 int drivePulseCount = 0;
-double dragFactorSum = 0;   // Summe des Drag-Faktors während der Recover-Phase
-int recoverPulseCount = 0;  // Anzahl der Pulse in der Recover-Phase
+double dragFactorSum = 0;  
+int recoverPulseCount = 0; 
 int validReadingsCount = 0;
 
 volatile int64_t prevT = 0;
@@ -35,7 +35,7 @@ const int debounceTime = 6000;
 const int upperLimit = 53366;
 double driveSum = 0;
 double recoverSum = 0;
-int transitionPulseCount = 0;  // Zählt die Pulse nach Zustandwechsel von Drive zu Recover
+int transitionPulseCount = 0;
 unsigned long previousMillis = 0;
 const long updateInterval = 1000;
 
@@ -56,8 +56,6 @@ enum State { RECOVER,
              DRIVE };
 State currentState = DRIVE;
 State previousState = DRIVE;
-
-//Nano33BLEMagneticData magneticData;
 
 BLEService CyclePowerService("1818");
 BLECharacteristic CyclePowerFeature("2A65", BLERead, 4);
@@ -95,15 +93,12 @@ void buttonPinInterrupt() {
   newPulseDurationAvailable = true;
 }
 
-/* Determine if the current phase is DRIVE or RECOVER
-by comparing the ratio of the previous pulse interval to the current interval.
-Returns true if ratio < 1, indicating a transition to RECOVER.
-*/
+// Determine if the current phase is DRIVE or RECOVER
 bool detectState(double prev, double cur) {
   return (prev / cur) < 1;
 }
 
-//Count Av-Array-Entries for correct average calculation
+// Count Av-Array-Entries for correct average calculation
 int countValidReadings(long readings[], int arraySize) {
   int count = 0;
   for (int i = 0; i < arraySize; i++) {
@@ -114,7 +109,7 @@ int countValidReadings(long readings[], int arraySize) {
 
   return count;
 }
-//Calculations based on RP3-README
+// Calculations based on RP3-README
 double calculateAngularVelocity(double pulseTime) {
   return (2.0 * PI) / (pulseTime * magnetCount);
 }
@@ -124,7 +119,7 @@ double calculateDragFactor(double currentPulse, double previousPulse) {
 }
 
 double calculatePower(double dragFactor, double angularVelocity) {
-  return dragFactor * pow(angularVelocity, 3);  
+  return dragFactor * pow(angularVelocity, 3);
 }
 
 void setup() {
@@ -137,10 +132,9 @@ void setup() {
     readings[i] = 0;
   }
 
-  //Setup BLE Service
+  // Setup BLE Service
   if (!BLE.begin()) {
-    while (1)
-      ;
+    while (1);
   } else {
     BLE.setDeviceName(BLE_DEVICE_NAME);
     BLE.setLocalName(BLE_LOCAL_NAME);
@@ -215,22 +209,22 @@ void loop() {
             detectedState = DRIVE;
           }
 
-          //State transition from DRIVE to RECOVER
-          //Stay in DRIVE State for the first 6 "RECOVER-Pulses"
+          // State transition from DRIVE to RECOVER
+          // Stay in DRIVE State for the first 6 "RECOVER-Pulses"
           if (previousState == DRIVE && detectedState == RECOVER) {
             if (transitionPulseCount < 6) {
               transitionPulseCount++;
-              currentState = DRIVE; 
+              currentState = DRIVE;
             } else {
               currentState = RECOVER;
-              transitionPulseCount = 0; 
+              transitionPulseCount = 0;
             }
           } else {
             currentState = detectedState;
           }
 
-          //Process DRIVE state
-          //State transition from RECOVER to DRIVE: handle last 2 RECOVER-Pulses as DRIVE-Pulses
+          // Process DRIVE state
+          // State transition from RECOVER to DRIVE: handle last 2 RECOVER-Pulses as DRIVE-Pulses
           if (currentState == DRIVE) {
             if (previousState == RECOVER) {
               drivePulseCount += 2;
@@ -253,8 +247,8 @@ void loop() {
             driveSum += avInSeconds;
           }
 
-          //Process RECOVER State
-          //State transition from DRIVE to RECOVER: calculate power and the timestamp for strokes per minute for this stroke
+          // Process RECOVER State
+          // State transition from DRIVE to RECOVER: calculate power and the timestamp for strokes per minute for this stroke
           if (currentState == RECOVER) {
             if (previousState == DRIVE) {
               angularVelocity = angularVelocitySum / drivePulseCount;
@@ -263,28 +257,7 @@ void loop() {
               strokeInSeconds = driveSum + recoverSum;
               strokesPerMinute = 60 / (float)strokeInSeconds;
 
-              Serial.print("drivesum: ");
-              Serial.print(driveSum, 3);
-              Serial.print(" ; rec sum: ");
-              Serial.print(recoverSum, 3);
-              Serial.print(" ; stroke in sec: ");
-              Serial.print(strokeInSeconds, 3);
-              Serial.print(" ; strokes per minute: ");
-              Serial.print(round(strokesPerMinute));
-              //Serial.println("Stroke finished!");
-              Serial.print(" ; Schläge: ");
-              Serial.print(revolutions);
-              //Serial.print("; Durchschnittliche Winkelgeschwindigkeit: ");
-              //Serial.print(angularVelocity);
-              //Serial.print(" ; DragFactor: ");
-              //Serial.print(dragFactor, 6);
-              Serial.print(" ; Power: ");
-              Serial.print(round(power));
-
               timestamp += short(strokeInSeconds * 1024.0);
-
-              Serial.print("timestamp: ");
-              Serial.println(timestamp);
 
               angularVelocitySum = 0;
               drivePulseCount = 0;
@@ -296,7 +269,7 @@ void loop() {
             recoverPulseCount++;
             recoverSum += avInSeconds;
 
-            if (recoverPulseCount >= magnetCount) {  //first a(magnetcount) pulses ignored, siehe doc
+            if (recoverPulseCount >= magnetCount) {  // first a(magnetcount) pulses ignored, siehe doc
               dragFactorSum += calculateDragFactor(avInSeconds, averagePrevInSeconds);
             }
           }
@@ -306,7 +279,7 @@ void loop() {
         interrupts();
       }
 
-      //BLE Datatranser: sends data every second, duplicate power/strokes per minute values are exptected and handled
+      // BLE Datatranser: sends data every second, duplicate power/strokes per minute values are exptected and handled
       if (currentMillis - previousMillis >= updateInterval) {
         previousMillis = currentMillis;
 
@@ -330,18 +303,6 @@ void loop() {
         bleBuffer[7] = ((unsigned short)timestamp >> 8) & 0xff;
 
         CyclePowerMeasurement.writeValue(bleBuffer, 8);
-        
-        /*Serial.print("power: ");
-        Serial.print(power);
-        Serial.print(" ; revolutions: ");
-        Serial.print(revolutions);
-        Serial.print(" ; PREVtimestamp: ");
-        Serial.print(prevTimestamp);
-        Serial.print(" ; timestamp: ");
-        Serial.print(timestamp);
-        Serial.print("; updateState: ");
-        Serial.println(updateValues);
-        */
 
         timeStampDiff = timestamp - prevTimestamp;
         prevTimestamp = timestamp;
