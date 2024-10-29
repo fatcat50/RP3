@@ -308,7 +308,7 @@ void loop() {
             if (previousState == DRIVE) {
               angularVelocity = angularVelocitySum / drivePulseCount;
               power = (float)calculatePower(dragFactor, angularVelocity);  // Leistungsberechnung
-              revolutions++;
+              //revolutions++;
               strokeInSeconds = driveSum + recoverSum;
               strokesPerMinute = 60 / (float)strokeInSeconds;
 
@@ -374,7 +374,7 @@ void loop() {
       }
       //RANDOMIZED TEST
 
-      if (currentMillis - prevMillisRandom >= randomTime) {
+      /*if (currentMillis - prevMillisRandom >= randomTime) {
         //revolutions++;
         timestamp += short(randomTime * 1.024);
         randomTime = random(3000, 3500);
@@ -382,7 +382,7 @@ void loop() {
         power = random(90, 100);
         updateValues = true;
       }
-      
+      */
       /*
       Serial.print(revolutions);
       Serial.print("; ");
