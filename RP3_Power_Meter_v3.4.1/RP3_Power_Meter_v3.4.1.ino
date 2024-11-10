@@ -167,8 +167,7 @@ void setup() {
   //fBuffer[0] = 0x00;
   //fBuffer[1] = 0x00;
   //fBuffer[2] = 0x00;
-  fBuffer[3] |= 0x08;
-  Serial.print("Test");
+  fBuffer[0] |= 0x08;
 
   CyclePowerFeature.writeValue(fBuffer, 4);
   CyclePowerSensorLocation.writeValue(slBuffer, 1);
