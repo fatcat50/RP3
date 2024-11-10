@@ -74,7 +74,7 @@ State previousState = DRIVE;
 
 BLEService CyclePowerService("1818");
 BLECharacteristic CyclePowerFeature("2A65", BLERead, 4);
-BLECharacteristic CyclePowerMeasurement("2A63", BLERead | BLENotify, 8);
+BLECharacteristic CyclePowerMeasurement("2A63", BLENotify, 8);
 BLECharacteristic CyclePowerSensorLocation("2A5D", BLERead, 1);
 
 unsigned char bleBuffer[8];
@@ -85,9 +85,9 @@ float power = 0;
 unsigned short revolutions = 0;
 unsigned short prevRevolutions = 0;
 unsigned short timestamp = 1;
-unsigned short prevTimestamp = 1;
+unsigned short prevTimestamp = 0;
 unsigned short timeStampDiff = 0;
-unsigned short flags = 0x20;
+unsigned short flags = 0b0010000000000000; //0x2000
 byte sensorlocation = 0x0D;
 bool updateValues = false;
 
@@ -164,10 +164,11 @@ void setup() {
   }
   slBuffer[0] = sensorlocation & 0xff;
 
-  fBuffer[0] = 0x00;
-  fBuffer[1] = 0x00;
-  fBuffer[2] = 0x00;
-  fBuffer[3] = 0x08;
+  //fBuffer[0] = 0x00;
+  //fBuffer[1] = 0x00;
+  //fBuffer[2] = 0x00;
+  fBuffer[3] |= 0x08;
+  Serial.print("Test");
 
   CyclePowerFeature.writeValue(fBuffer, 4);
   CyclePowerSensorLocation.writeValue(slBuffer, 1);
@@ -374,7 +375,7 @@ void loop() {
       }
       //RANDOMIZED TEST
 
-      /*if (currentMillis - prevMillisRandom >= randomTime) {
+      if (currentMillis - prevMillisRandom >= randomTime) {
         //revolutions++;
         timestamp += short(randomTime * 1.024);
         randomTime = random(3000, 3500);
@@ -382,7 +383,7 @@ void loop() {
         power = random(90, 100);
         updateValues = true;
       }
-      */
+      
       /*
       Serial.print(revolutions);
       Serial.print("; ");
@@ -406,10 +407,10 @@ void loop() {
         bleBuffer[1] = (flags >> 8) & 0xff;
         bleBuffer[2] = (short)round(power) & 0xff;
         bleBuffer[3] = ((short)round(power) >> 8) & 0xff;
-        bleBuffer[4] = (unsigned short)revolutions & 0xff;
-        bleBuffer[5] = ((unsigned short)revolutions >> 8) & 0xff;
-        bleBuffer[6] = (unsigned short)timestamp & 0xff;
-        bleBuffer[7] = ((unsigned short)timestamp >> 8) & 0xff;
+        bleBuffer[4] = revolutions & 0xff;
+        bleBuffer[5] = (revolutions >> 8) & 0xff;
+        bleBuffer[6] = timestamp & 0xff;
+        bleBuffer[7] = (timestamp >> 8) & 0xff;
 
         CyclePowerMeasurement.writeValue(bleBuffer, 8);
         Serial.print("power: ");

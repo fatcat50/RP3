@@ -59,7 +59,7 @@ State previousState = DRIVE;
 
 BLEService CyclePowerService("1818");
 BLECharacteristic CyclePowerFeature("2A65", BLERead, 4);
-BLECharacteristic CyclePowerMeasurement("2A63", BLERead | BLENotify, 8);
+BLECharacteristic CyclePowerMeasurement("2A63", BLENotify, 8);
 BLECharacteristic CyclePowerSensorLocation("2A5D", BLERead, 1);
 
 unsigned char bleBuffer[8];
