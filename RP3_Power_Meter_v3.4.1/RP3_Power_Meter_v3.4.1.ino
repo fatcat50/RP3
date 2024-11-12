@@ -87,7 +87,7 @@ unsigned short prevRevolutions = 0;
 unsigned short timestamp = 1;
 unsigned short prevTimestamp = 0;
 unsigned short timeStampDiff = 0;
-unsigned short flags = 0x20;//0b0010000000000000; //0x2000 
+unsigned short flags = 0x20; //0b0010000000000000; //0x2000 
 // 0x20 stimmt, Zwift erkennt Cadence Sensor
 byte sensorlocation = 0x0D;
 bool updateValues = false;
@@ -168,7 +168,7 @@ void setup() {
   //fBuffer[0] = 0x00;
   //fBuffer[1] = 0x00;
   //fBuffer[2] = 0x00;
-  fBuffer[3] |= 0x08;
+  fBuffer[0] |= 0x08; //Polar Uhr zeigt Frequenz mit byte 0 bit 3 gesetzt!
 
   CyclePowerFeature.writeValue(fBuffer, 4);
   CyclePowerSensorLocation.writeValue(slBuffer, 1);
@@ -380,7 +380,7 @@ void loop() {
         timestamp += short(randomTime * 1.024);
         randomTime = random(3000, 3500);
         prevMillisRandom = currentMillis;
-        power = random(90, 100);
+        power = random(90, 110);
         updateValues = true;
       }
       
