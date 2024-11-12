@@ -70,7 +70,7 @@ float power = 0;
 unsigned short revolutions = 0;
 unsigned short prevRevolutions = 0;
 unsigned short timestamp = 1;
-unsigned short prevTimestamp = 1;
+unsigned short prevTimestamp = 0;
 unsigned short timeStampDiff = 0;
 unsigned short flags = 0x20;
 byte sensorlocation = 0x0D;
@@ -148,11 +148,7 @@ void setup() {
   }
 
   slBuffer[0] = sensorlocation & 0xff;
-
-  fBuffer[0] = 0x00;
-  fBuffer[1] = 0x00;
-  fBuffer[2] = 0x00;
-  fBuffer[3] = 0x08;
+  fBuffer[0] |= 0x08; 
 
   CyclePowerFeature.writeValue(fBuffer, 4);
   CyclePowerSensorLocation.writeValue(slBuffer, 1);
@@ -297,10 +293,10 @@ void loop() {
         bleBuffer[1] = (flags >> 8) & 0xff;
         bleBuffer[2] = (short)round(power) & 0xff;
         bleBuffer[3] = ((short)round(power) >> 8) & 0xff;
-        bleBuffer[4] = (unsigned short)revolutions & 0xff;
-        bleBuffer[5] = ((unsigned short)revolutions >> 8) & 0xff;
-        bleBuffer[6] = (unsigned short)timestamp & 0xff;
-        bleBuffer[7] = ((unsigned short)timestamp >> 8) & 0xff;
+        bleBuffer[4] = revolutions & 0xff;
+        bleBuffer[5] = (revolutions >> 8) & 0xff;
+        bleBuffer[6] = timestamp & 0xff;
+        bleBuffer[7] = (timestamp >> 8) & 0xff;
 
         CyclePowerMeasurement.writeValue(bleBuffer, 8);
 
