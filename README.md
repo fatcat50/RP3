@@ -33,7 +33,4 @@ The **RP3 Power Meter** is a performance measurement system for rowing ergometer
 - Once powered on, the device starts collecting and transmitting power data automatically.
 - The LED indicates connection status:  
   - **Flashing**: Searching for BLE connection  
-  - **Solid**: Connected to a BLE central device  
-
-## License
-This project is open-source under the **MIT License**. Feel free to use and modify it!
+  - **Solid**: Connected to a BLE central device
